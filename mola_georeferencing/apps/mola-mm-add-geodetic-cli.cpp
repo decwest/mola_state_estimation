@@ -18,7 +18,7 @@
  */
 
 #include <mp2p_icp/metricmap.h>
-#include <mrpt/3rdparty/tclap/CmdLine.h>
+#include <CLI/CLI.hpp>
 #include <mrpt/containers/yaml.h>
 #include <mrpt/io/CFileGZInputStream.h>
 #include <mrpt/maps/CPointsMap.h>
@@ -37,46 +37,32 @@ namespace
 // CLI flags:
 struct Cli
 {
-    TCLAP::CmdLine cmd{"mola-mm-add-geodetic"};
+    CLI::App cmd{"mola-mm-add-geodetic"};
 
-    TCLAP::ValueArg<std::string> argInputMap{
-        "i", "input", "Input metric map file (*.mm)", true, "input.mm", "input.mm", cmd};
+    std::string              argInputMap;
+    std::string              argOutputMap;
+    std::string              argGeoRefFile;
+    std::vector<std::string> argLayers;
+    std::string              argPlugins;
+    bool                     argVerbose{false};
 
-    TCLAP::ValueArg<std::string> argOutputMap{
-        "o",  "output",    "Output metric map file (*.mm) with geodetic coordinates added",
-        true, "output.mm", "output.mm",
-        cmd};
-
-    TCLAP::ValueArg<std::string> argGeoRefFile{
-        "g",
-        "georef",
-        "Optional geo-referencing file (*.georef or *.yaml) to use if the input map "
-        "does not have embedded georeferencing information",
-        false,
-        "",
-        "map.georef",
-        cmd};
-
-    TCLAP::MultiArg<std::string> argLayers{
-        "l",
-        "layer",
-        "Layer(s) to process. If not provided, all CGenericPointsMap layers will be processed. "
-        "This argument can appear multiple times.",
-        false,
-        "layerName",
-        cmd};
-
-    TCLAP::ValueArg<std::string> argPlugins{
-        "p",
-        "load-plugins",
-        "One or more (comma separated) *.so files to load as plugins",
-        false,
-        "",
-        "foobar.so",
-        cmd};
-
-    TCLAP::SwitchArg argVerbose{
-        "v", "verbose", "Enable verbose output with progress information", cmd, false};
+    void setup()
+    {
+        cmd.add_option("-i,--input", argInputMap,
+            "Input metric map file (*.mm)")->required();
+        cmd.add_option("-o,--output", argOutputMap,
+            "Output metric map file (*.mm) with geodetic coordinates added")->required();
+        cmd.add_option("-g,--georef", argGeoRefFile,
+            "Optional geo-referencing file (*.georef or *.yaml) to use if the input map "
+            "does not have embedded georeferencing information");
+        cmd.add_option("-l,--layer", argLayers,
+            "Layer(s) to process. If not provided, all CGenericPointsMap layers will be processed. "
+            "This argument can appear multiple times.");
+        cmd.add_option("-p,--load-plugins", argPlugins,
+            "One or more (comma separated) *.so files to load as plugins");
+        cmd.add_flag("-v,--verbose", argVerbose,
+            "Enable verbose output with progress information");
+    }
 };
 
 bool is_binary_file(const std::string& fil)
@@ -206,13 +192,13 @@ void add_geodetic_fields_to_layer(
 
 void run_add_geodetic(Cli& cli)
 {
-    const bool verbose = cli.argVerbose.getValue();
+    const bool verbose = cli.argVerbose;
 
     // Load plugins if specified
-    if (cli.argPlugins.isSet())
+    if (!cli.argPlugins.empty())
     {
         std::string errMsg;
-        const auto  plugins = cli.argPlugins.getValue();
+        const auto  plugins = cli.argPlugins;
         std::cout << "[mola-mm-add-geodetic] Loading plugin(s): " << plugins << "\n";
         if (!mrpt::system::loadPluginModules(plugins, errMsg))
         {
@@ -221,7 +207,7 @@ void run_add_geodetic(Cli& cli)
     }
 
     // Load input map
-    const auto& filInput = cli.argInputMap.getValue();
+    const auto& filInput = cli.argInputMap;
     std::cout << "[mola-mm-add-geodetic] Reading input map from: '" << filInput << "'..."
               << "\n";
 
@@ -242,13 +228,13 @@ void run_add_geodetic(Cli& cli)
                   << "\n";
         georef = mm.georeferencing;
     }
-    else if (cli.argGeoRefFile.isSet())
+    else if (!cli.argGeoRefFile.empty())
     {
-        georef = load_georef_file(cli.argGeoRefFile.getValue());
+        georef = load_georef_file(cli.argGeoRefFile);
         if (!georef.has_value())
         {
             throw std::runtime_error(
-                "Failed to load georeferencing from file: " + cli.argGeoRefFile.getValue());
+                "Failed to load georeferencing from file: " + cli.argGeoRefFile);
         }
     }
     else
@@ -283,10 +269,10 @@ void run_add_geodetic(Cli& cli)
 
     // Determine which layers to process
     std::vector<std::string> layersToProcess;
-    if (cli.argLayers.isSet())
+    if (!cli.argLayers.empty())
     {
         // Process only selected layers
-        for (const auto& layerName : cli.argLayers.getValue())
+        for (const auto& layerName : cli.argLayers)
         {
             layersToProcess.push_back(layerName);
         }
@@ -333,7 +319,7 @@ void run_add_geodetic(Cli& cli)
               << "\n";
 
     // Save output map
-    const auto& filOutput = cli.argOutputMap.getValue();
+    const auto& filOutput = cli.argOutputMap;
     std::cout << "[mola-mm-add-geodetic] Saving output map to: '" << filOutput << "'..."
               << "\n";
 
@@ -353,11 +339,15 @@ int main(int argc, char** argv)
     try
     {
         Cli cli;
+        cli.setup();
 
-        // Parse arguments
-        if (!cli.cmd.parse(argc, argv))
+        try
         {
-            return 1;
+            cli.cmd.parse(argc, argv);
+        }
+        catch (const CLI::ParseError& e)
+        {
+            return cli.cmd.exit(e);
         }
 
         run_add_geodetic(cli);

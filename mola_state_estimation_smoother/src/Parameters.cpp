@@ -117,11 +117,11 @@ void Parameters::loadFrom(const mrpt::containers::yaml& cfg)
     {
         ASSERT_(cfg["initial_twist"].isSequence() && cfg["initial_twist"].asSequence().size() == 6);
 
-        auto&      tw  = initial_twist;
-        const auto seq = cfg["initial_twist"].asSequenceRange();
+        auto&                        tw    = initial_twist;
+        const mrpt::containers::yaml twYml = cfg["initial_twist"];
         for (size_t i = 0; i < 6; i++)
         {
-            tw[i] = seq.at(i).as<double>();
+            tw[i] = twYml[static_cast<int>(i)].as<double>();
         }
     }
 

@@ -28,6 +28,7 @@
 
 #include <fstream>
 #include <memory>
+#include <string>
 
 // arguments: class_name, parent_class, class namespace
 IMPLEMENTS_MRPT_OBJECT(StateEstimationSimple, mola::ExecutableBase, mola::state_estimation_simple)

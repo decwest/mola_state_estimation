@@ -14,7 +14,7 @@
 
 #include <mola_georeferencing/simplemap_georeference.h>
 #include <mp2p_icp/metricmap.h>
-#include <mrpt/3rdparty/tclap/CmdLine.h>
+#include <CLI/CLI.hpp>
 #include <mrpt/containers/yaml.h>
 #include <mrpt/io/CFileGZOutputStream.h>
 #include <mrpt/system/filesystem.h>
@@ -26,65 +26,43 @@
 
 struct Cli
 {
-    TCLAP::CmdLine cmd{"mola-sm-georeferencing-cli"};
+    CLI::App cmd{"mola-sm-georeferencing-cli"};
 
-    TCLAP::ValueArg<std::string> argInput{
-        "i", "input", "Input .simplemap file", true, "map.simplemap", "map.simplemap", cmd};
+    std::string argInput;
+    std::string argWriteMMInto;
+    std::string argOutput;
+    double      argHorz{1.0};
+    bool        argHorzSet{false};
+    double      argIMUGravitySigmaDeg{3.0};
+    bool        argIMUGravitySigmaDegSet{false};
+    std::string argPlugins;
+    bool        argNoIMUGravity{false};
+    std::string arg_verbosity_level{"INFO"};
 
-    TCLAP::ValueArg<std::string> argWriteMMInto{
-        "",    "write-into", "An existing .mm file in which to write the georeferencing metadata",
-        false, "map.mm",     "map.mm",
-        cmd};
-
-    TCLAP::ValueArg<std::string> argOutput{
-        "o",
-        "output",
-        "Write the obtained georeferencing metadata to a file. The format is "
-        "determined by the file extension: binary gzip (`*.georef`) or YAML "
-        "(`*.yaml`, `*.yml`).",
-        false,
-        "map.georef",
-        "(map.georef|map.yaml)",
-        cmd};
-
-    TCLAP::ValueArg<double> argHorz{
-        "",
-        "horizontality-sigma",
-        "For short trajectories (not >10x the GPS uncertainty), this helps to "
-        "avoid degeneracy.",
-        false,
-        1.0,
-        "1.0",
-        cmd};
-
-    TCLAP::ValueArg<double> argIMUGravitySigmaDeg{"",
-                                                  "imu-gravity-sigma-deg",
-                                                  "IMU gravity alignment uncertainty (degrees).",
-                                                  false,
-                                                  3.0,
-                                                  "3.0",
-                                                  cmd};
-
-    TCLAP::ValueArg<std::string> argPlugins{
-        "l",
-        "load-plugins",
-        "One or more (comma separated) *.so files to load as plugins, e.g. "
-        "defining new CMetricMap classes",
-        false,
-        "foobar.so",
-        "foobar.so",
-        cmd};
-
-    TCLAP::SwitchArg argNoIMUGravity{
-        "", "no-imu-gravity",
-        "Disable using IMU acceleration data for gravity alignment "
-        "(enabled by default).",
-        cmd, false};
-
-    TCLAP::ValueArg<std::string> arg_verbosity_level{
-        "v",   "verbosity", "Verbosity level: ERROR|WARN|INFO|DEBUG (Default: INFO)",
-        false, "INFO",      "INFO",
-        cmd};
+    void setup()
+    {
+        cmd.add_option("-i,--input", argInput, "Input .simplemap file")->required();
+        cmd.add_option("--write-into", argWriteMMInto,
+            "An existing .mm file in which to write the georeferencing metadata");
+        cmd.add_option("-o,--output", argOutput,
+            "Write the obtained georeferencing metadata to a file. The format is "
+            "determined by the file extension: binary gzip (`*.georef`) or YAML "
+            "(`*.yaml`, `*.yml`).");
+        cmd.add_option("--horizontality-sigma", argHorz,
+            "For short trajectories (not >10x the GPS uncertainty), this helps to "
+            "avoid degeneracy.")->each([this](const std::string&){ argHorzSet = true; });
+        cmd.add_option("--imu-gravity-sigma-deg", argIMUGravitySigmaDeg,
+            "IMU gravity alignment uncertainty (degrees).")
+            ->each([this](const std::string&){ argIMUGravitySigmaDegSet = true; });
+        cmd.add_option("-l,--load-plugins", argPlugins,
+            "One or more (comma separated) *.so files to load as plugins, e.g. "
+            "defining new CMetricMap classes");
+        cmd.add_flag("--no-imu-gravity", argNoIMUGravity,
+            "Disable using IMU acceleration data for gravity alignment "
+            "(enabled by default).");
+        cmd.add_option("-v,--verbosity", arg_verbosity_level,
+            "Verbosity level: ERROR|WARN|INFO|DEBUG (Default: INFO)");
+    }
 };
 
 static bool is_binary_georef(const std::string& fil)
@@ -94,13 +72,13 @@ static bool is_binary_georef(const std::string& fil)
 
 void run_sm_georef(Cli& cli)
 {
-    if (cli.argPlugins.isSet())
+    if (!cli.argPlugins.empty())
     {
         std::string sErrs;
-        bool        ok = mrpt::system::loadPluginModules(cli.argPlugins.getValue(), sErrs);
+        bool        ok = mrpt::system::loadPluginModules(cli.argPlugins, sErrs);
         if (!ok)
         {
-            std::cerr << "Errors loading plugins: " << cli.argPlugins.getValue() << std::endl;
+            std::cerr << "Errors loading plugins: " << cli.argPlugins << std::endl;
             throw std::runtime_error(sErrs.c_str());
         }
     }
@@ -108,9 +86,9 @@ void run_sm_georef(Cli& cli)
     mrpt::system::COutputLogger logger;
     logger.setLoggerName("mola-sm-georeferencing-cli");
     logger.setVerbosityLevel(
-        mrpt::typemeta::str2enum<mrpt::system::VerbosityLevel>(cli.arg_verbosity_level.getValue()));
+        mrpt::typemeta::str2enum<mrpt::system::VerbosityLevel>(cli.arg_verbosity_level));
 
-    const auto& filSM = cli.argInput.getValue();
+    const auto& filSM = cli.argInput;
 
     mrpt::maps::CSimpleMap sm;
 
@@ -125,20 +103,20 @@ void run_sm_georef(Cli& cli)
     mola::SMGeoReferencingParams p;
     p.logger = &logger;
 
-    if (cli.argHorz.isSet())
+    if (cli.argHorzSet)
     {
         p.fgParams.addHorizontalityConstraints = true;
-        p.fgParams.horizontalitySigmaZ         = cli.argHorz.getValue();
+        p.fgParams.horizontalitySigmaZ         = cli.argHorz;
     }
     // TODO: p.fgParams.minimumUncertaintyXYZ = xxx;
 
-    if (cli.argNoIMUGravity.getValue())
+    if (cli.argNoIMUGravity)
     {
         p.useIMUGravityAlignment = false;
     }
-    if (cli.argIMUGravitySigmaDeg.isSet())
+    if (cli.argIMUGravitySigmaDegSet)
     {
-        p.imuGravityParams.imuGravitySigmaDeg = cli.argIMUGravitySigmaDeg.getValue();
+        p.imuGravityParams.imuGravitySigmaDeg = cli.argIMUGravitySigmaDeg;
     }
 
     const mola::SMGeoReferencingOutput smGeo = mola::simplemap_georeference(sm, p);
@@ -161,7 +139,7 @@ void run_sm_georef(Cli& cli)
               << "T_enu_to_map: " << geo_ref.T_enu_to_map.asString() << "\n";
 
     // Warn if the user has not requested any output at all.
-    if (!cli.argWriteMMInto.isSet() && !cli.argOutput.isSet())
+    if (cli.argWriteMMInto.empty() && cli.argOutput.empty())
     {
         std::cerr
             << "[mola-sm-georeferencing-cli] WARNING: Georeferencing was computed successfully "
@@ -171,39 +149,39 @@ void run_sm_georef(Cli& cli)
                "  The result will be discarded.\n";
     }
 
-    if (cli.argWriteMMInto.isSet())
+    if (!cli.argWriteMMInto.empty())
     {
         mp2p_icp::metric_map_t mm;
 
         std::cout << "[mola-sm-georeferencing-cli] Loading mm map: '"
-                  << cli.argWriteMMInto.getValue() << "'..." << std::endl;
+                  << cli.argWriteMMInto << "'..." << std::endl;
 
-        const bool loadOk = mm.load_from_file(cli.argWriteMMInto.getValue());
+        const bool loadOk = mm.load_from_file(cli.argWriteMMInto);
         if (!loadOk)
         {
             THROW_EXCEPTION_FMT(
-                "Error loading input map file: '%s'", cli.argWriteMMInto.getValue().c_str());
+                "Error loading input map file: '%s'", cli.argWriteMMInto.c_str());
         }
 
         // overwrite metadata:
         mm.georeferencing = smGeo.geo_ref;
 
         // and save:
-        const auto saved_ok = mm.save_to_file(cli.argWriteMMInto.getValue());
+        const auto saved_ok = mm.save_to_file(cli.argWriteMMInto);
         if (!saved_ok)
         {
-            std::cerr << "Error saving modified .mm file: '" << cli.argWriteMMInto.getValue()
+            std::cerr << "Error saving modified .mm file: '" << cli.argWriteMMInto
                       << "'\n";
             return;
         }
 
         std::cout << "[mola-sm-georeferencing-cli] Writing modified mm map: '"
-                  << cli.argWriteMMInto.getValue() << "'..." << std::endl;
+                  << cli.argWriteMMInto << "'..." << std::endl;
     }
 
-    if (cli.argOutput.isSet())
+    if (!cli.argOutput.empty())
     {
-        const std::string outFil = cli.argOutput.getValue();
+        const std::string outFil = cli.argOutput;
 
         std::cout << "[mola-sm-georeferencing-cli] Writing georef data file: '" << outFil << "'..."
                   << std::endl;
@@ -236,11 +214,15 @@ int main(int argc, char** argv)
     try
     {
         Cli cli;
+        cli.setup();
 
-        // Parse arguments:
-        if (!cli.cmd.parse(argc, argv))
+        try
         {
-            return 1;  // should exit.
+            cli.cmd.parse(argc, argv);
+        }
+        catch (const CLI::ParseError& e)
+        {
+            return cli.cmd.exit(e);
         }
 
         run_sm_georef(cli);

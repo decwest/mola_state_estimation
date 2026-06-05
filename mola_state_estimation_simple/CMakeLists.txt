@@ -32,7 +32,7 @@ project(mola_state_estimation_simple LANGUAGES CXX)
 find_package(mola_common REQUIRED)
 
 # find CMake dependencies:
-find_package(mrpt-obs)
+find_package(mrpt_obs)
 
 # Find MOLA packages:
 find_package(mola_imu_preintegration REQUIRED)
@@ -47,11 +47,11 @@ mola_add_library(
   TARGET ${PROJECT_NAME}
   SOURCES ${LIB_SRCS} ${LIB_PUBLIC_HDRS}
   PUBLIC_LINK_LIBRARIES
-    mrpt::obs
+    mrpt::mrpt_obs
     mola::mola_imu_preintegration
     mola::mola_kernel
   #PRIVATE_LINK_LIBRARIES
-  #  mrpt::obs
+  #  mrpt::mrpt_obs
   CMAKE_DEPENDENCIES
     mola_common
     mola_kernel

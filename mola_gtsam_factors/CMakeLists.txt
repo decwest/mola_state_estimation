@@ -35,7 +35,7 @@ project(mola_gtsam_factors LANGUAGES CXX)
 # MOLA CMake scripts: "mola_xxx()"
 find_package(mola_common REQUIRED)
 find_package(GTSAM REQUIRED)
-find_package(mrpt-poses REQUIRED)
+find_package(mrpt_poses REQUIRED)
 
 # -----------------------
 # define lib:
@@ -64,7 +64,7 @@ mola_add_library(
     src/register.cpp
   PUBLIC_LINK_LIBRARIES
     gtsam
-    mrpt::poses
+    mrpt::mrpt_poses
   #PRIVATE_LINK_LIBRARIES
   CMAKE_DEPENDENCIES
     mrpt-poses
