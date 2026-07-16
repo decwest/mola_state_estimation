@@ -244,6 +244,13 @@ mp2p_icp::metric_map_t::Georeferencing mola::recenter_georeference(
 
 mola::GNSSFrames mola::extract_gnss_frames_from_sm(
     const mrpt::maps::CSimpleMap&                           sm,
+    const std::optional<mrpt::topography::TGeodeticCoords>& refCoordIn)
+{
+    return extract_gnss_frames_from_sm(sm, refCoordIn, 0);
+}
+
+mola::GNSSFrames mola::extract_gnss_frames_from_sm(
+    const mrpt::maps::CSimpleMap&                           sm,
     const std::optional<mrpt::topography::TGeodeticCoords>& refCoordIn,
     unsigned int                                            minimumFixQuality)
 {

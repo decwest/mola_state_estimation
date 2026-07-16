@@ -173,8 +173,18 @@ struct GNSSFrames
 
 GNSSFrames extract_gnss_frames_from_sm(
     const mrpt::maps::CSimpleMap&                           sm,
-    const std::optional<mrpt::topography::TGeodeticCoords>& refCoord          = std::nullopt,
-    unsigned int                                            minimumFixQuality = 0);
+    const std::optional<mrpt::topography::TGeodeticCoords>& refCoord = std::nullopt);
+
+/** Version with an explicit minimum GNSS fix quality.
+ *
+ * Keep the two-argument overload above as an ABI-compatible entry point for
+ * consumers compiled against mola_georeferencing releases predating this
+ * filtering option.
+ */
+GNSSFrames extract_gnss_frames_from_sm(
+    const mrpt::maps::CSimpleMap&                           sm,
+    const std::optional<mrpt::topography::TGeodeticCoords>& refCoord,
+    unsigned int                                            minimumFixQuality);
 
 struct FrameIMU
 {
