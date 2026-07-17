@@ -23,12 +23,14 @@
 #include <mola_state_estimation_simple/StateEstimationSimple.h>
 #include <mola_yaml/yaml_helpers.h>
 #include <mrpt/core/get_env.h>
+#include <mrpt/math/wrap2pi.h>
 #include <mrpt/obs/CObservationRobotPose.h>
 #include <mrpt/obs/gnss_messages.h>
 #include <mrpt/poses/Lie/SO.h>
 #include <mrpt/topography/conversions.h>
 
 #include <Eigen/Dense>
+#include <cmath>
 #include <fstream>
 #include <memory>
 
@@ -275,11 +277,24 @@ void StateEstimationSimple::fuse_odometry(
 {
     auto lck = std::scoped_lock(state_mtx_);
 
-    // Advance last_pose by the incremental 2D odometry delta:
+    // Advance last_pose by the incremental 2D odometry delta, composed on the
+    // gravity-aligned yaw frame only. Wheels measure planar motion; composing
+    // the SE(2) increment with full 3D pose composition would rotate about the
+    // anchor's tilted local z-axis and translate along its pitched x-axis, so
+    // a pitched sensor mount would accumulate attitude error (~2x pitch after
+    // a U-turn) and a spurious z drift. Keep z/pitch/roll owned by ICP/IMU.
     if (state_.last_odom_obs && state_.last_pose)
     {
-        const auto poseIncr    = odom.odometry - state_.last_odom_obs->odometry;
-        state_.last_pose->mean = state_.last_pose->mean + mrpt::poses::CPose3D(poseIncr);
+        const auto poseIncr = odom.odometry - state_.last_odom_obs->odometry;
+
+        auto&        m   = state_.last_pose->mean;
+        const double yaw = m.yaw();
+        const double c = std::cos(yaw), s = std::sin(yaw);
+        m.x(m.x() + c * poseIncr.x() - s * poseIncr.y());
+        m.y(m.y() + s * poseIncr.x() + c * poseIncr.y());
+        m.setYawPitchRoll(
+            mrpt::math::wrapToPi(yaw + poseIncr.phi()), m.pitch(), m.roll());
+
         state_.pose_already_updated_with_odom = true;
     }
     state_.last_odom_obs = odom;
